@@ -8,11 +8,15 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TheArtOfDev.HtmlRenderer.Adapters;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace MonitoringPacket
@@ -29,6 +33,8 @@ namespace MonitoringPacket
         string time_str = "", sourceIP = "", destinationIP = "", protocol_type = "", length = "";
 
         
+        //SpoofARP ArpSpoofer { get; set; }
+
 
         bool startCapturingAgain = false;
 
@@ -40,6 +46,8 @@ namespace MonitoringPacket
 
         private void Default_Load(object sender, EventArgs e)
         {
+            btnStart.Enabled = true;
+            btnStop.Enabled = false;
 
             LibPcapLiveDeviceList devices = LibPcapLiveDeviceList.Instance;
 
@@ -58,39 +66,41 @@ namespace MonitoringPacket
 
         }
 
-        private void radCapture_CheckedChanged2(object sender, Bunifu.UI.WinForms.BunifuRadioButton.CheckedChangedEventArgs e)
-        {
-            btnStart.Enabled = btnStop.Enabled = txtFilter.Enabled = radCapture.Checked;
-            btnBrowse.Enabled = btnImport.Enabled = radRead.Checked;
-        }
+        //private void radCapture_CheckedChanged2(object sender, Bunifu.UI.WinForms.BunifuRadioButton.CheckedChangedEventArgs e)
+        //{
+        //    btnStart.Enabled = btnStop.Enabled = txtFilter.Enabled = radCapture.Checked;
+        //    btnBrowse.Enabled = btnImport.Enabled = radRead.Checked;
+        //}
 
-        private void radRead_CheckedChanged2(object sender, Bunifu.UI.WinForms.BunifuRadioButton.CheckedChangedEventArgs e)
-        {
-            if (radRead.Checked)
-            {
-                if(wifi_device!= null)
-                {
-                    wifi_device.StopCapture();
-                    wifi_device.Close();
-                }
-                if(captureFileWriter != null)
-                    captureFileWriter.Close();
-                if (sniffing != null)
-                    sniffing.Abort();
+        //private void radRead_CheckedChanged2(object sender, Bunifu.UI.WinForms.BunifuRadioButton.CheckedChangedEventArgs e)
+        //{
+        //    if (radRead.Checked)
+        //    {
+        //        if(wifi_device!= null)
+        //        {
+        //            wifi_device.StopCapture();
+        //            wifi_device.Close();
+        //        }
+        //        if(captureFileWriter != null)
+        //            captureFileWriter.Close();
+        //        if (sniffing != null)
+        //            sniffing.Abort();
 
-                dataGridView1.Rows.Clear();
-                capturedPackets_list.Clear();
-            }
-                //btnStop.PerformClick();
+        //        dataGridView1.Rows.Clear();
+        //        capturedPackets_list.Clear();
+        //    }
+        //        //btnStop.PerformClick();
 
-            btnStart.Enabled = btnStop.Enabled = txtFilter.Enabled = radCapture.Checked;
-            btnBrowse.Enabled = btnImport.Enabled = radRead.Checked;
+        //    btnStart.Enabled = btnStop.Enabled = txtFilter.Enabled = radCapture.Checked;
+        //    btnBrowse.Enabled = btnImport.Enabled = radRead.Checked;
             
-        }
+        //}
 
         private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
             string protocol = dataGridView1.Rows[e.RowIndex].Cells["Protocol"].Value.ToString().ToLower();
+            string sourceIP = dataGridView1.Rows[e.RowIndex].Cells["Source"].Value.ToString().ToLower();
+            string destinationIP = dataGridView1.Rows[e.RowIndex].Cells["Destination"].Value.ToString().ToLower();
             int key = Int32.Parse(dataGridView1.Rows[e.RowIndex].Cells[0].Value.ToString());
             Packet packet;
             bool getPacket = capturedPackets_list.TryGetValue(key, out packet);
@@ -214,22 +224,43 @@ namespace MonitoringPacket
                     txtInfo.Text = "";
                     break;
             }
+
+            //txtInfo.Text += "\r\n Source hostname:" + getHostNameFromIP(sourceIP);
+            //txtInfo.Text += "\r\n Destination hostname:" + getHostNameFromIP(destinationIP);
         }
 
         private void btnStop_Click(object sender, EventArgs e)
         {
             sniffing.Abort();
+            
             wifi_device.StopCapture();
             wifi_device.Close();
             captureFileWriter.Close();
-
+            //ArpSpoofer.StopAsync();
             btnStart.Enabled = true;
-            txtFilter.Enabled = true;
+            txtFilters.Enabled = true;
             btnStop.Enabled = false;
+            
+        }
+
+        private string getHostNameFromIP(string ip)
+        {
+            try{
+                IPAddress addr = IPAddress.Parse(ip);
+                IPHostEntry entry = Dns.GetHostEntry(addr);
+                return entry.HostName;
+            }
+            catch
+            {
+                return "Unknown";
+            }
         }
 
         private void btnStart_Click(object sender, EventArgs e)
         {
+            btnStart.Enabled = false;
+            btnStop.Enabled = true;
+
             selectedIntIndex = dropdownNIC.SelectedIndex;
             wifi_device = interfaceList[selectedIntIndex];
 
@@ -241,7 +272,7 @@ namespace MonitoringPacket
                 sniffing.Start();
                 btnStart.Enabled = false;
                 btnStop.Enabled = true;
-                txtFilter.Enabled = false;
+                txtFilters.Enabled = false;
 
                 dataGridView1.Rows.Clear();
                 capturedPackets_list.Clear();
@@ -262,10 +293,13 @@ namespace MonitoringPacket
                     sniffing.Start();
                     btnStart.Enabled = false;
                     btnStop.Enabled = true;
-                    txtFilter.Enabled = false;
+                    txtFilters.Enabled = false;
                 }
             }
             startCapturingAgain = true;
+
+
+
         }
 
         private void sniffing_Proccess()
@@ -277,9 +311,9 @@ namespace MonitoringPacket
             // Start the capturing process
             if (wifi_device.Opened)
             {
-                if (txtFilter.Text != "")
+                if (txtFilters.Text != "")
                 {
-                    wifi_device.Filter = txtFilter.Text;
+                    wifi_device.Filter = txtFilters.Text;
                 }
                 captureFileWriter = new CaptureFileWriterDevice("capture.pcap");
                 captureFileWriter.Open(wifi_device);
@@ -290,6 +324,7 @@ namespace MonitoringPacket
 
         public void Device_OnPacketArrival(object sender, PacketCapture e)
         {
+            //MessageBox.Show("Done");
             // dump to a file
             var rawPacket = e.GetPacket();
             captureFileWriter.Write(rawPacket);
@@ -300,11 +335,9 @@ namespace MonitoringPacket
             time_str = time.ToString("yyyy-MM-dd HH:mm:ss:fff");
             length = rawPacket.Data.Length.ToString();
 
-
             var packet = PacketDotNet.Packet.ParsePacket(rawPacket.LinkLayerType, rawPacket.Data);
 
             // add to the list
-
 
             var ethernetPacket = (EthernetPacket)packet;
 
@@ -312,6 +345,8 @@ namespace MonitoringPacket
             var ipPacket = packet.Extract<PacketDotNet.IPPacket>();
 
             var arpPacket = packet.Extract<PacketDotNet.ArpPacket>();
+
+            //var icmpPacket = packet.Extract<PacketDotNet.Packet>();
 
             if (arpPacket != null)
             {
@@ -337,6 +372,7 @@ namespace MonitoringPacket
                     row.Cells["SourceMac"].Value = getMacAddress(senderHardwareAddress.ToString());
                     row.Cells["DestinationMac"].Value = getMacAddress(targerHardwareAddress.ToString());
                     packetNumber++;
+                    
                 }));
             }
 
@@ -352,7 +388,6 @@ namespace MonitoringPacket
 
                 var sourceMac = ethernetPacket.SourceHardwareAddress;
                 var destinationMac = ethernetPacket.DestinationHardwareAddress;
-
 
                 dataGridView1.Invoke(new Action(() => {
                     //dataGridView1.Rows.Add();
@@ -371,6 +406,7 @@ namespace MonitoringPacket
                     row.Cells["SourceMac"].Value = getMacAddress(sourceMac.ToString());
                     row.Cells["DestinationMac"].Value = getMacAddress(destinationMac.ToString());
                     packetNumber++;
+                    
                 }));
             }
         }
@@ -394,7 +430,7 @@ namespace MonitoringPacket
             if (dialogResult == DialogResult.OK)
             {
                 //do something
-                Application.Exit();
+                this.Hide();
             }
             
         }
@@ -424,44 +460,50 @@ namespace MonitoringPacket
             }
         }
 
-        private void btnBrowse_Click(object sender, EventArgs e)
-        {
-            OpenFileDialog fdlg = new OpenFileDialog();
-            fdlg.Title = "Select pcap file";
-            fdlg.InitialDirectory = @"c:\";
-            fdlg.Filter = "All files (*.*)|*.pcap";
-            fdlg.FilterIndex = 2;
-            fdlg.RestoreDirectory = true;
-            if (fdlg.ShowDialog() == DialogResult.OK)
-            {
-                txtFilePath.Text = fdlg.FileName;
-            }
-        }
+        //private void btnBrowse_Click(object sender, EventArgs e)
+        //{
+        //    OpenFileDialog fdlg = new OpenFileDialog();
+        //    fdlg.Title = "Select pcap file";
+        //    fdlg.InitialDirectory = @"c:\";
+        //    fdlg.Filter = "All files (*.*)|*.pcap";
+        //    fdlg.FilterIndex = 2;
+        //    fdlg.RestoreDirectory = true;
+        //    if (fdlg.ShowDialog() == DialogResult.OK)
+        //    {
+        //        txtFilePath.Text = fdlg.FileName;
+        //    }
+        //}
 
-        private void btnImport_Click(object sender, EventArgs e)
-        {
-            ICaptureDevice device;
-            var capFile = txtFilePath.Text;
-            try
-            {
-                // Get an offline device
-                device = new CaptureFileReaderDevice(capFile);
+        //private void btnImport_Click(object sender, EventArgs e)
+        //{
+        //    ICaptureDevice device;
+        //    var capFile = txtFilePath.Text;
+        //    try
+        //    {
+        //        capturedPackets_list.Clear();
+        //        dataGridView1.Rows.Clear();
+        //        // Get an offline device
+        //        device = new CaptureFileReaderDevice(capFile);
 
-                device.Open();
+        //        device.Open();
 
-                device.OnPacketArrival +=
-                new PacketArrivalEventHandler(IDevice_OnPacketArrival);
-                // Open the device
-                device.Capture();
-                device.Close();
-                MessageBox.Show("Finish loaded file");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Caught exception when opening file" + ex.ToString());
-                return;
-            }
-        }
+        //        device.OnPacketArrival +=
+        //        new PacketArrivalEventHandler(IDevice_OnPacketArrival);
+        //        // Open the device
+        //        if (txtReadFilter.Text != "")
+        //        {
+        //            device.Filter = txtReadFilter.Text;
+        //        }
+        //        device.Capture();
+        //        device.Close();
+        //        MessageBox.Show("Finish loaded file");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show("Caught exception when opening file" + ex.ToString());
+        //        return;
+        //    }
+        //}
 
         public void IDevice_OnPacketArrival(object sender, PacketCapture e)
         {
