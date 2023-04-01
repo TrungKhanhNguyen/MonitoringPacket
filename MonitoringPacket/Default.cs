@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -17,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TheArtOfDev.HtmlRenderer.Adapters;
+using static System.Net.WebRequestMethods;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace MonitoringPacket
@@ -37,10 +39,12 @@ namespace MonitoringPacket
 
 
         bool startCapturingAgain = false;
+        string targetIP { get; set; }
 
         Thread sniffing;
-        public Default()
+        public Default(string ip)
         {
+            targetIP = ip;
             InitializeComponent();
         }
 
@@ -48,7 +52,10 @@ namespace MonitoringPacket
         {
             btnStart.Enabled = true;
             btnStop.Enabled = false;
-
+            if (!String.IsNullOrEmpty(targetIP))
+            {
+                txtFilters.Text = "host " +  targetIP;
+            }
             LibPcapLiveDeviceList devices = LibPcapLiveDeviceList.Instance;
 
             foreach (LibPcapLiveDevice device in devices)
@@ -232,7 +239,6 @@ namespace MonitoringPacket
         private void btnStop_Click(object sender, EventArgs e)
         {
             sniffing.Abort();
-            
             wifi_device.StopCapture();
             wifi_device.Close();
             captureFileWriter.Close();
@@ -240,7 +246,40 @@ namespace MonitoringPacket
             btnStart.Enabled = true;
             txtFilters.Enabled = true;
             btnStop.Enabled = false;
-            
+
+            DialogResult dialogResult = MessageBox.Show("Do you want to save pcap file?", "Save file", MessageBoxButtons.YesNo);
+            if (dialogResult == DialogResult.Yes)
+            {
+                try
+                {
+                    string dummyFileName = "sniffer-" + DateTime.Now.ToString("yyyyMMdd-HHmm");
+
+                    SaveFileDialog sf = new SaveFileDialog();
+                    // Feed the dummy name to the save dialog
+                    sf.FileName = dummyFileName;
+                    sf.Filter = "Pcap (*.pcap)|*.pcap";
+                    //sf.DefaultExt = "pcap";
+
+                    if (sf.ShowDialog() == DialogResult.OK)
+                    {
+
+                        // Now here's our save folder
+                        string savePath = Path.GetFullPath(sf.FileName);
+                        //var fullPath = savePath + 
+                        System.IO.File.Copy("capture.pcap", savePath);
+                        // Do whatever
+                    }
+                }
+                catch (Exception ex) {
+                    MessageBox.Show("Unhandled error: " + ex.Message, "Errors");
+                }
+                //do something
+               
+            }
+            else if (dialogResult == DialogResult.No)
+            {
+                //do something else
+            }
         }
 
         private string getHostNameFromIP(string ip)
@@ -277,28 +316,26 @@ namespace MonitoringPacket
                 dataGridView1.Rows.Clear();
                 capturedPackets_list.Clear();
             }
-            else if (startCapturingAgain)
-            {
-                if (MessageBox.Show("Your packets are captured in a file. Starting a new capture will override existing ones.", "Confirm", MessageBoxButtons.OK, MessageBoxIcon.Warning) == DialogResult.OK)
-                {
-                    // user clicked ok
-                    System.IO.File.Delete("capture.pcap");
+            //else if (startCapturingAgain)
+            //{
+            //    if (MessageBox.Show("Your packets are captured in a file. Starting a new capture will override existing ones.", "Confirm", MessageBoxButtons.OK, MessageBoxIcon.Warning) == DialogResult.OK)
+            //    {
+            //        // user clicked ok
+            //        System.IO.File.Delete("capture.pcap");
 
-                    dataGridView1.Rows.Clear();
-                    capturedPackets_list.Clear();
-                    packetNumber = 1;
-                    txtInfo.Text = "";
-                    wifi_device.OnPacketArrival += new PacketArrivalEventHandler(Device_OnPacketArrival);
-                    sniffing = new Thread(new ThreadStart(sniffing_Proccess));
-                    sniffing.Start();
-                    btnStart.Enabled = false;
-                    btnStop.Enabled = true;
-                    txtFilters.Enabled = false;
-                }
-            }
-            startCapturingAgain = true;
-
-
+            //        dataGridView1.Rows.Clear();
+            //        capturedPackets_list.Clear();
+            //        packetNumber = 1;
+            //        txtInfo.Text = "";
+            //        wifi_device.OnPacketArrival += new PacketArrivalEventHandler(Device_OnPacketArrival);
+            //        sniffing = new Thread(new ThreadStart(sniffing_Proccess));
+            //        sniffing.Start();
+            //        btnStart.Enabled = false;
+            //        btnStop.Enabled = true;
+            //        txtFilters.Enabled = false;
+            //    }
+            //}
+            //startCapturingAgain = true;
 
         }
 
@@ -426,12 +463,7 @@ namespace MonitoringPacket
 
         private void btnShutdown_Click(object sender, EventArgs e)
         {
-            DialogResult dialogResult = MessageBox.Show("Do you really want to exit app?", "Confirmation", MessageBoxButtons.OKCancel);
-            if (dialogResult == DialogResult.OK)
-            {
-                //do something
-                this.Hide();
-            }
+            this.Hide();
             
         }
         public bool isMinimized = false;

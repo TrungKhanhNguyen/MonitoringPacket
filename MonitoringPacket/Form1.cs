@@ -255,16 +255,22 @@ namespace MonitoringPacket
             //string ip = dataGridView1.Rows[e.RowIndex].Cells["IPAddress"].Value.ToString().ToLower();
             //string ip = dataGridView1.Rows[e.RowIndex].Cells["IPAddress"].Value.ToString().ToLower();
             txtTargetIP.Text = ip;
-            txtTargetMac.Text = mac;
+            txtTargetMac.Text = mac.ToUpper();
+
+            txtSourceIP.Text = gwipAddress;
+            txtSourceMac.Text = gwMac;
         }
 
         private void btnAttack_Click(object sender, EventArgs e)
         {
             var targetIP = txtTargetIP.Text;
             var targetMacAddr = txtTargetMac.Text;
-            if(String.IsNullOrEmpty(targetIP) || String.IsNullOrEmpty(targetMacAddr))
+
+            var sourceIP = txtSourceIP.Text;
+            var sourceMac = txtSourceMac.Text;
+            if (String.IsNullOrEmpty(targetIP) || String.IsNullOrEmpty(targetMacAddr) || String.IsNullOrEmpty(sourceIP) || String.IsNullOrEmpty(sourceMac))
             {
-                MessageBox.Show("Target IP and Mac address cannot be empty!", "Error");
+                MessageBox.Show("Target IP&Mac, source IP&Mac cannot be empty!", "Error");
             }
             else
             {
@@ -274,6 +280,7 @@ namespace MonitoringPacket
 
                 txtTargetIP.Enabled = false;
                 txtTargetMac.Enabled = false;
+                txtSourceIP.Enabled = false; txtSourceMac.Enabled = false;
                 selectedIntIndex = dropdownNIC.SelectedIndex;
 
                 wifi_device = interfaceList[selectedIntIndex];
@@ -283,9 +290,9 @@ namespace MonitoringPacket
 
                 PhysicalAddress targetMac = PhysicalAddress.Parse(txtTargetMac.Text.ToUpper());
 
-                IPAddress gatway = IPAddress.Parse(gwipAddress);
+                IPAddress gatway = IPAddress.Parse(sourceIP);
 
-                PhysicalAddress gatwayMac = PhysicalAddress.Parse(gwMac.ToUpper());
+                PhysicalAddress gatwayMac = PhysicalAddress.Parse(sourceMac.ToUpper());
 
 
                 if (target == null || gatway == null || targetMac == null || gatwayMac == null)
@@ -324,11 +331,13 @@ namespace MonitoringPacket
             btnAttack.Text = "Attack";
             txtTargetIP.Enabled = true;
             txtTargetMac.Enabled = true;
+            txtSourceIP.Enabled = true; txtSourceMac.Enabled = true;
         }
 
         private void btnGetPCAP_Click(object sender, EventArgs e)
         {
-            Default def = new Default();
+            var passValue = String.IsNullOrEmpty(txtTargetIP.Text) == true ? "" : txtTargetIP.Text;
+            Default def = new Default(passValue);
             def.Show();
         }
 
